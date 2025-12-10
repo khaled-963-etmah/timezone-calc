@@ -224,24 +224,28 @@
         // Convert and display time
         function convertTime() {
             let sourceDate;
-            let sourceZone;
 
             if (mode === 'auto') {
                 sourceDate = new Date();
-                sourceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
             } else {
                 if (!customDate.value || !customTime.value) return;
                 
-                // Parse the date and time as if it's in the selected "From" timezone
+                // Get the selected source timezone
+                const sourceZone = fromZone.value;
+                
+                // Create a date string in ISO format
                 const dateTimeString = `${customDate.value}T${customTime.value}:00`;
-                sourceZone = fromZone.value;
                 
-                // Create a date string that represents the time in the source timezone
-                // We need to get the UTC equivalent of this time in the source timezone
-                const tempDate = new Date(dateTimeString);
+                // Parse as if it's in the source timezone
+                // We'll use a technique to properly interpret the date/time in the source timezone
+                const year = customDate.value.split('-')[0];
+                const month = customDate.value.split('-')[1];
+                const day = customDate.value.split('-')[2];
+                const hour = customTime.value.split(':')[0];
+                const minute = customTime.value.split(':')[1];
                 
-                // Get the offset of the source timezone at this date
-                const sourceFormatter = new Intl.DateTimeFormat('en-US', {
+                // Create a formatter for the source timezone
+                const formatter = new Intl.DateTimeFormat('en-US', {
                     timeZone: sourceZone,
                     year: 'numeric',
                     month: '2-digit',
@@ -252,25 +256,25 @@
                     hour12: false
                 });
                 
-                // Parse the input as if it's already in the source timezone
-                // This is a workaround to create the correct UTC time
-                const parts = dateTimeString.split('T');
-                const [year, month, day] = parts[0].split('-');
-                const [hour, minute] = parts[1].split(':');
+                // Create a date object and format it to get the local interpretation
+                const localDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
                 
-                // Create ISO string assuming the input is in the source timezone
-                const isoString = `${year}-${month}-${day}T${hour}:${minute}:00`;
+                // Get what this time means in the source timezone
+                const sourceParts = formatter.formatToParts(localDate);
+                const sourceObj = {};
+                sourceParts.forEach(part => {
+                    if (part.type !== 'literal') {
+                        sourceObj[part.type] = part.value;
+                    }
+                });
                 
-                // Create a date and adjust for the timezone offset difference
-                sourceDate = new Date(isoString);
+                // Calculate the offset between what we want and what we got
+                const wantedTime = parseInt(hour) * 60 + parseInt(minute);
+                const gotTime = parseInt(sourceObj.hour) * 60 + parseInt(sourceObj.minute);
+                const offsetMinutes = wantedTime - gotTime;
                 
-                // Get offset for source timezone (this is hacky but works)
-                const testDate = new Date(isoString);
-                const utcDate = new Date(testDate.toLocaleString('en-US', { timeZone: 'UTC' }));
-                const sourceDate2 = new Date(testDate.toLocaleString('en-US', { timeZone: sourceZone }));
-                const diff = utcDate.getTime() - sourceDate2.getTime();
-                
-                sourceDate = new Date(testDate.getTime() + diff);
+                // Adjust the date by the offset
+                sourceDate = new Date(localDate.getTime() + offsetMinutes * 60 * 1000);
             }
 
             const targetZone = toZone.value;
